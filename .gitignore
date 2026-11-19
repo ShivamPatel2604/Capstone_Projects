@@ -1,0 +1,15 @@
+# Terraform
+**/.terraform/
+**/*.tfstate
+**/*.tfstate.*
+**/*.tfplan
+**/terraform.tfvars
+**/crash.log
+
+# Credentials
+**/*.pem
+**/*.key
+
+# OS files
+.DS_Store
+Thumbs.db
