@@ -18,3 +18,7 @@ resource "aws_iam_user_policy_attachment" "s3_attachment" {
   user       = aws_iam_user.s3_user.name
   policy_arn = aws_iam_policy.s3_read_policy.arn
 }
+
+# Project 6: Version control demonstration
+# This configuration is tracked and maintained using Git and GitHub.
+
