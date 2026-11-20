@@ -1,6 +1,6 @@
 # Project 7: CI Validation for Terraform
 
-![Terraform Validation](https://github.com/ShivamPatel2604/Capstone_Projects/actions/workflows/terraform-validation.yml/badge.svg?branch=feature%2Fproject7-terraform-ci-validation)
+![Terraform Validation](https://github.com/ShivamPatel2604/Capstone_Projects/actions/workflows/terraform-validation.yml/badge.svg?branch=feature%2Fproject7-clean-main)
 
 ## Goal
 Automate Infrastructure as Code checks using GitHub Actions.
