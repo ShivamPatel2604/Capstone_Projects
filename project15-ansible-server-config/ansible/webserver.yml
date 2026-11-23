@@ -1,0 +1,65 @@
+---
+- name: Install and configure Apache web server
+  hosts: webservers
+  become: true
+  gather_facts: false
+
+  vars:
+    web_package: httpd
+    web_service: httpd
+    web_root: /var/www/html
+
+  pre_tasks:
+    - name: Wait for the SSM agent connection
+      ansible.builtin.wait_for_connection:
+        timeout: 300
+
+    - name: Gather facts
+      ansible.builtin.setup:
+
+  tasks:
+    - name: Install Apache
+      ansible.builtin.dnf:
+        name: "{{ web_package }}"
+        state: present
+
+    - name: Deploy custom index page
+      ansible.builtin.template:
+        src: templates/index.html.j2
+        dest: "{{ web_root }}/index.html"
+        owner: apache
+        group: apache
+        mode: "0644"
+
+    - name: Hide Apache version in responses
+      ansible.builtin.copy:
+        dest: /etc/httpd/conf.d/security.conf
+        content: |
+          ServerTokens Prod
+          ServerSignature Off
+        mode: "0644"
+      notify: Restart Apache
+
+    - name: Start and enable Apache
+      ansible.builtin.service:
+        name: "{{ web_service }}"
+        state: started
+        enabled: true
+
+  handlers:
+    - name: Restart Apache
+      ansible.builtin.service:
+        name: "{{ web_service }}"
+        state: restarted
+
+- name: Verify web servers from the controller
+  hosts: localhost
+  connection: local
+  gather_facts: false
+
+  tasks:
+    - name: Check HTTP 200 from each node's public IP
+      ansible.builtin.uri:
+        url: "http://{{ hostvars[item].public_ip }}"
+        status_code: 200
+      loop: "{{ groups['webservers'] }}"
