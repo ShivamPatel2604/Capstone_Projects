@@ -1,5 +1,11 @@
+# Only standard AZs: EKS control plane cannot use Local/Wavelength Zones (e.g. ap-south-1-ccu-1a)
 data "aws_availability_zones" "available" {
   state = "available"
+
+  filter {
+    name   = "zone-type"
+    values = ["availability-zone"]
+  }
 }
 
 locals {
