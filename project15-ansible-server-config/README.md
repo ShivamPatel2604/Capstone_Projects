@@ -5,7 +5,7 @@ Use Ansible for remote configuration automation: set up an Ansible controller an
 
 ## Setup
 - Ansible controller: the Ubuntu 24.04 Linux VM used for previous projects
-- Connection method: Ansible `amazon.aws.aws_ssm` connection plugin (AWS Systems Manager Session Manager over HTTPS 443)
+- Connection method: Ansible `community.aws.aws_ssm` connection plugin (AWS Systems Manager Session Manager over HTTPS 443)
 - Managed nodes: 2 x Amazon Linux 2023 EC2 instances (`t3.micro`) provisioned by Terraform
 - Region: ap-south-1 (Mumbai)
 - Web server: Apache (`httpd`) installed and configured only by Ansible
@@ -40,7 +40,7 @@ project15-ansible-server-config/
 ```
 
 ## Technologies Used
-- Ansible (`amazon.aws.aws_ssm` connection plugin)
+- Ansible (`community.aws.aws_ssm` connection plugin)
 - AWS Systems Manager (Session Manager)
 - Terraform
 - Amazon EC2 / VPC / IAM / S3
@@ -61,13 +61,12 @@ Install Ansible, the AWS Python SDK, and the Session Manager plugin:
 ```bash
 sudo apt update
 sudo apt install -y ansible python3-boto3 python3-botocore
-ansible-galaxy collection install 'amazon.aws:>=8.0.0,<10.0.0'
 
 curl -fsSL "https://s3.amazonaws.com/session-manager-downloads/plugin/latest/ubuntu_64bit/session-manager-plugin.deb" -o /tmp/session-manager-plugin.deb
 sudo dpkg -i /tmp/session-manager-plugin.deb
 
 ansible --version
-ansible-galaxy collection list amazon.aws
+ansible-galaxy collection list community.aws
 session-manager-plugin --version
 ```
 
@@ -141,7 +140,7 @@ Save the screenshots in this folder:
 - `5.png` – browser showing the web page from node 2
 
 ## Troubleshooting
-- `connection plugin 'amazon.aws.aws_ssm' was not found`: install the collection from step 2.
+- `connection plugin 'community.aws.aws_ssm' was not found`: check `ansible-galaxy collection list community.aws` (bundled with the Ubuntu `ansible` package).
 - URLs not opening: expected until the playbook has installed Apache.
 - `ping` hangs / instance not in SSM: wait a few minutes; check `describe-instance-information` shows `Online`.
 - `session-manager-plugin not found`: re-run the install in step 2.
