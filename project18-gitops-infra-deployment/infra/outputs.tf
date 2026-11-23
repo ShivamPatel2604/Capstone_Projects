@@ -15,5 +15,5 @@ output "feature_flags_parameter" {
 
 output "deployed_app_version" {
   description = "App version currently deployed"
-  value       = aws_ssm_parameter.app_version.value
+  value       = aws_ssm_parameter.app_version.insecure_value
 }

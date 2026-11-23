@@ -61,12 +61,14 @@ resource "aws_ssm_parameter" "app_version" {
   name        = "/${var.name_prefix}/${var.environment}/app_version"
   description = "Deployed application version (managed by GitOps)"
   type        = "String"
-  value       = var.app_version
+  # insecure_value: non-secret config, so the new value is visible in the PR plan diff
+  insecure_value = var.app_version
 }
 
 resource "aws_ssm_parameter" "feature_flags" {
   name        = "/${var.name_prefix}/${var.environment}/feature_flags"
   description = "Application feature flags (managed by GitOps)"
   type        = "String"
-  value       = jsonencode(var.feature_flags)
+  # insecure_value: non-secret config, so the new value is visible in the PR plan diff
+  insecure_value = jsonencode(var.feature_flags)
 }
