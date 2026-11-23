@@ -22,15 +22,7 @@ data "aws_ami" "amazon_linux" {
   }
 }
 
-# Public IP of the machine running Terraform (the Ansible controller)
-data "http" "controller_ip" {
-  url = "https://checkip.amazonaws.com"
-}
-
-locals {
-  controller_cidr = coalesce(var.controller_cidr, "${chomp(data.http.controller_ip.response_body)}/32")
-  ansible_dir     = "${path.module}/../ansible"
-}
+data "aws_caller_identity" "current" {}
 
 # ---------------------------------------------------------------------------
 # Networking
@@ -82,18 +74,12 @@ resource "aws_route_table_association" "public" {
   route_table_id = aws_route_table.public.id
 }
 
+# No SSH (port 22): only HTTP inbound. Ansible reaches the nodes through
+# AWS Systems Manager, which uses the agent's outbound HTTPS connection.
 resource "aws_security_group" "nodes" {
   name        = "${var.project_name}-nodes-sg"
-  description = "SSH from Ansible controller, HTTP from anywhere"
+  description = "HTTP only - no SSH, management via SSM"
   vpc_id      = aws_vpc.main.id
-
-  ingress {
-    description = "SSH from Ansible controller"
-    from_port   = 22
-    to_port     = 22
-    protocol    = "tcp"
-    cidr_blocks = [local.controller_cidr]
-  }
 
   ingress {
     description = "HTTP access"
@@ -104,7 +90,7 @@ resource "aws_security_group" "nodes" {
   }
 
   egress {
-    description = "Allow outbound traffic"
+    description = "Outbound for SSM agent, S3 and package repos"
     from_port   = 0
     to_port     = 0
     protocol    = "-1"
@@ -117,25 +103,67 @@ resource "aws_security_group" "nodes" {
 }
 
 # ---------------------------------------------------------------------------
-# SSH key pair used by the Ansible controller
+# IAM: lets the SSM agent on the nodes register with Systems Manager
 # ---------------------------------------------------------------------------
-resource "tls_private_key" "ansible" {
-  algorithm = "ED25519"
+data "aws_iam_policy_document" "ec2_assume" {
+  statement {
+    actions = ["sts:AssumeRole"]
+
+    principals {
+      type        = "Service"
+      identifiers = ["ec2.amazonaws.com"]
+    }
+  }
 }
 
-resource "aws_key_pair" "ansible" {
-  key_name   = "${var.project_name}-key"
-  public_key = tls_private_key.ansible.public_key_openssh
+resource "aws_iam_role" "nodes" {
+  name               = "${var.project_name}-nodes-ssm-role"
+  assume_role_policy = data.aws_iam_policy_document.ec2_assume.json
 }
 
-resource "local_sensitive_file" "private_key" {
-  content         = tls_private_key.ansible.private_key_openssh
-  filename        = "${local.ansible_dir}/project15-key.pem"
-  file_permission = "0600"
+resource "aws_iam_role_policy_attachment" "nodes_ssm" {
+  role       = aws_iam_role.nodes.name
+  policy_arn = "arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore"
+}
+
+resource "aws_iam_instance_profile" "nodes" {
+  name = "${var.project_name}-nodes-profile"
+  role = aws_iam_role.nodes.name
 }
 
 # ---------------------------------------------------------------------------
-# Managed nodes (no user_data: Ansible does all configuration)
+# S3 bucket used by the Ansible aws_ssm connection plugin for file transfer
+# ---------------------------------------------------------------------------
+resource "aws_s3_bucket" "ansible_ssm" {
+  bucket        = "${var.project_name}-ansible-ssm-${data.aws_caller_identity.current.account_id}"
+  force_destroy = true
+}
+
+resource "aws_s3_bucket_public_access_block" "ansible_ssm" {
+  bucket                  = aws_s3_bucket.ansible_ssm.id
+  block_public_acls       = true
+  block_public_policy     = true
+  ignore_public_acls      = true
+  restrict_public_buckets = true
+}
+
+resource "aws_s3_bucket_lifecycle_configuration" "ansible_ssm" {
+  bucket = aws_s3_bucket.ansible_ssm.id
+
+  rule {
+    id     = "expire-leftover-transfers"
+    status = "Enabled"
+
+    filter {}
+
+    expiration {
+      days = 1
+    }
+  }
+}
+
+# ---------------------------------------------------------------------------
+# Managed nodes (no key pair, no user_data: Ansible does all configuration)
 # ---------------------------------------------------------------------------
 resource "aws_instance" "node" {
   count = var.node_count
@@ -144,7 +172,7 @@ resource "aws_instance" "node" {
   instance_type          = var.instance_type
   subnet_id              = aws_subnet.public.id
   vpc_security_group_ids = [aws_security_group.nodes.id]
-  key_name               = aws_key_pair.ansible.key_name
+  iam_instance_profile   = aws_iam_instance_profile.nodes.name
 
   root_block_device {
     volume_size = 8
@@ -162,15 +190,19 @@ resource "aws_instance" "node" {
     Role = "webserver"
   }
 
-  depends_on = [aws_route_table_association.public]
+  depends_on = [
+    aws_route_table_association.public,
+    aws_iam_role_policy_attachment.nodes_ssm,
+  ]
 }
 
 # Ansible inventory generated from the created instances
 resource "local_file" "inventory" {
-  filename        = "${local.ansible_dir}/inventory.ini"
+  filename        = "${path.module}/../ansible/inventory.ini"
   file_permission = "0644"
   content = templatefile("${path.module}/templates/inventory.tftpl", {
-    nodes    = aws_instance.node
-    key_file = "project15-key.pem"
+    nodes  = aws_instance.node
+    region = var.aws_region
+    bucket = aws_s3_bucket.ansible_ssm.bucket
   })
 }

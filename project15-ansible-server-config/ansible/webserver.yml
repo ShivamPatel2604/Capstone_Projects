@@ -2,11 +2,20 @@
 - name: Install and configure Apache web server
   hosts: webservers
   become: true
+  gather_facts: false
 
   vars:
     web_package: httpd
     web_service: httpd
     web_root: /var/www/html
+
+  pre_tasks:
+    - name: Wait for the SSM agent connection
+      ansible.builtin.wait_for_connection:
+        timeout: 300
+
+    - name: Gather facts
+      ansible.builtin.setup:
 
   tasks:
     - name: Install Apache
@@ -43,13 +52,14 @@
         name: "{{ web_service }}"
         state: restarted
 
-- name: Verify web servers
-  hosts: webservers
+- name: Verify web servers from the controller
+  hosts: localhost
+  connection: local
   gather_facts: false
 
   tasks:
-    - name: Check HTTP 200 from each node
+    - name: Check HTTP 200 from each node's public IP
       ansible.builtin.uri:
-        url: "http://{{ ansible_host }}"
+        url: "http://{{ hostvars[item].public_ip }}"
         status_code: 200
-      delegate_to: localhost
+      loop: "{{ groups['webservers'] }}"

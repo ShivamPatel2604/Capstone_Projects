@@ -1,19 +1,14 @@
-output "node_public_ips" {
-  description = "Public IPs of the managed web server nodes"
-  value       = aws_instance.node[*].public_ip
+output "node_instance_ids" {
+  description = "Instance IDs Ansible connects to through SSM"
+  value       = aws_instance.node[*].id
+}
+
+output "ssm_bucket" {
+  description = "S3 bucket used by the aws_ssm connection plugin"
+  value       = aws_s3_bucket.ansible_ssm.bucket
 }
 
 output "web_urls" {
-  description = "URLs to verify the web server after running the playbook"
+  description = "Public URLs to verify the web servers after running the playbook"
   value       = [for ip in aws_instance.node[*].public_ip : "http://${ip}"]
-}
-
-output "controller_cidr" {
-  description = "CIDR allowed to SSH to the nodes"
-  value       = local.controller_cidr
-}
-
-output "inventory_file" {
-  description = "Generated Ansible inventory path"
-  value       = abspath(local_file.inventory.filename)
 }

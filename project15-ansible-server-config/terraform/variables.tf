@@ -33,9 +33,3 @@ variable "node_count" {
   type        = number
   default     = 2
 }
-
-variable "controller_cidr" {
-  description = "CIDR allowed to SSH to the nodes. Leave null to auto-detect the controller's public IP."
-  type        = string
-  default     = null
-}
