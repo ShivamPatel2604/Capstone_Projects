@@ -1,0 +1,232 @@
+name: Project 18 - GitOps Infra Deployment
+
+# GitOps flow:
+#   PR opened/updated   -> terraform plan, plan posted as a PR comment
+#   PR merged to main   -> terraform plan -> manual approval (production env) -> terraform apply
+on:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - 'project18-gitops-infra-deployment/infra/**'
+      - '.github/workflows/project18-gitops-infra.yml'
+
+  push:
+    branches:
+      - main
+    paths:
+      - 'project18-gitops-infra-deployment/infra/**'
+      - '.github/workflows/project18-gitops-infra.yml'
+
+  workflow_dispatch:
+
+# Never run two plans/applies against the same state at once; never cancel an apply mid-way.
+concurrency:
+  group: project18-gitops-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+env:
+  TF_VERSION: 1.17.2
+  TF_IN_AUTOMATION: 'true'
+  TF_INPUT: 'false'
+  AWS_REGION: ap-south-1
+  WORKING_DIR: project18-gitops-infra-deployment/infra
+
+jobs:
+  plan:
+    name: Terraform Plan
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write       # OIDC -> AWS
+      pull-requests: write  # plan comment
+
+    defaults:
+      run:
+        working-directory: ${{ env.WORKING_DIR }}
+
+    outputs:
+      has_changes: ${{ steps.plan.outputs.has_changes }}
+
+    steps:
+      - name: Check repository variables
+        working-directory: .
+        env:
+          TF_STATE_BUCKET: ${{ vars.TF_STATE_BUCKET }}
+          AWS_PLAN_ROLE_ARN: ${{ vars.AWS_PLAN_ROLE_ARN }}
+        run: |
+          missing=0
+          for v in TF_STATE_BUCKET AWS_PLAN_ROLE_ARN; do
+            if [ -z "${!v}" ]; then
+              echo "::error::Repository variable $v is not set. Run the bootstrap stack and 'gh variable set' (see README)."
+              missing=1
+            fi
+          done
+          exit $missing
+
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TF_VERSION }}
+          terraform_wrapper: false
+
+      - name: Configure AWS credentials (plan role via OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_PLAN_ROLE_ARN }}
+          role-session-name: project18-plan-${{ github.run_id }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Terraform Format
+        run: terraform fmt -check -recursive
+
+      - name: Terraform Init
+        run: terraform init -backend-config="bucket=${{ vars.TF_STATE_BUCKET }}"
+
+      - name: Terraform Validate
+        run: terraform validate
+
+      - name: Terraform Plan
+        id: plan
+        run: |
+          set +e
+          terraform plan -detailed-exitcode -out=tfplan
+          code=$?
+          set -e
+          # 0 = no changes, 1 = error, 2 = changes present
+          if [ "$code" -eq 1 ]; then exit 1; fi
+          if [ "$code" -eq 2 ]; then
+            echo "has_changes=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "has_changes=false" >> "$GITHUB_OUTPUT"
+          fi
+          terraform show -no-color tfplan > plan.txt
+
+      - name: Write job summary
+        run: |
+          {
+            echo "## Terraform Plan - Project 18"
+            echo "**Changes detected:** \`${{ steps.plan.outputs.has_changes }}\`"
+            echo '```hcl'
+            head -c 60000 plan.txt
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Comment plan on pull request
+        if: github.event_name == 'pull_request'
+        uses: actions/github-script@v7
+        env:
+          HAS_CHANGES: ${{ steps.plan.outputs.has_changes }}
+        with:
+          script: |
+            const fs = require('fs');
+            const marker = '<!-- project18-terraform-plan -->';
+            let plan = fs.readFileSync(`${process.env.WORKING_DIR}/plan.txt`, 'utf8');
+            if (plan.length > 60000) plan = plan.slice(0, 60000) + '\n... (truncated, see job summary)';
+            const body = [
+              marker,
+              '### Project 18 - Terraform Plan',
+              `**Changes detected:** \`${process.env.HAS_CHANGES}\``,
+              '',
+              'Merging this PR will trigger `terraform apply`, which waits for approval on the **production** environment.',
+              '',
+              '<details><summary>Show plan</summary>',
+              '',
+              '```hcl',
+              plan,
+              '```',
+              '</details>',
+              '',
+              `_Run: ${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}_`,
+            ].join('\n');
+
+            const { data: comments } = await github.rest.issues.listComments({
+              ...context.repo,
+              issue_number: context.issue.number,
+              per_page: 100,
+            });
+            const existing = comments.find(c => c.body && c.body.includes(marker));
+            if (existing) {
+              await github.rest.issues.updateComment({ ...context.repo, comment_id: existing.id, body });
+            } else {
+              await github.rest.issues.createComment({ ...context.repo, issue_number: context.issue.number, body });
+            }
+
+      - name: Upload plan artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: project18-tfplan
+          path: |
+            ${{ env.WORKING_DIR }}/tfplan
+            ${{ env.WORKING_DIR }}/plan.txt
+          if-no-files-found: error
+          retention-days: 5
+
+  apply:
+    name: Terraform Apply
+    needs: plan
+    if: >-
+      github.ref == 'refs/heads/main' &&
+      (github.event_name == 'push' || github.event_name == 'workflow_dispatch') &&
+      needs.plan.outputs.has_changes == 'true'
+    runs-on: ubuntu-latest
+
+    # Required reviewers on this environment = the approval gate.
+    # The AWS apply role trusts ONLY this environment's OIDC subject.
+    environment:
+      name: production
+
+    permissions:
+      contents: read
+      id-token: write
+
+    defaults:
+      run:
+        working-directory: ${{ env.WORKING_DIR }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TF_VERSION }}
+          terraform_wrapper: false
+
+      - name: Configure AWS credentials (apply role via OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_APPLY_ROLE_ARN }}
+          role-session-name: project18-apply-${{ github.run_id }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Download reviewed plan
+        uses: actions/download-artifact@v4
+        with:
+          name: project18-tfplan
+          path: ${{ env.WORKING_DIR }}
+
+      - name: Terraform Init
+        run: terraform init -backend-config="bucket=${{ vars.TF_STATE_BUCKET }}"
+
+      # Applies exactly the plan that was reviewed; Terraform rejects it if the state changed since.
+      - name: Terraform Apply
+        run: terraform apply -auto-approve tfplan
+
+      - name: Show outputs
+        run: |
+          terraform output
+          {
+            echo "## Terraform Apply - Project 18"
+            echo "Applied commit \`${GITHUB_SHA}\` to **production**."
+            echo '```'
+            terraform output -no-color
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
