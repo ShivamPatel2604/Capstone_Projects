@@ -1,0 +1,98 @@
+
+=== Project 24 manual chaos test - scenario: stop ===
+[15:15:30] Instance : i-021a02f768db01b76 (ap-south-1)
+[15:15:30] Service  : httpd
+[15:15:30] Health   : http://13.233.196.155/health
+[15:15:30] Results  : /home/clouduser/aws-terraform-capstone/project24-manual-chaos-test/results/stop
+
+=== 1. Pre-flight checks ===
+[15:15:30] SSM status: Online
+[15:15:30] Health check from this VM: HTTP 200
+
+=== 2. Steady state (baseline) ===
+is-active : active
+Restart=on-failure
+MainPID=4777
+NRestarts=0
+ActiveEnterTimestamp=Mon 2026-11-23 15:11:34 UTC
+local health: HTTP 200
+
+[15:15:34] Health monitor started (pid 108939, 1 check/s) - collecting 10s of baseline
+[15:15:44] Baseline: 10 UP / 0 DOWN
+
+=== 3. Inject failure ===
+### STATE CHANGE 2026-11-23T15:15:45.698Z UP -> DOWN (http 000)
+ACTION_MS=1795446945402
+is-active : inactive
+Result=success
+ActiveState=inactive
+SubState=dead
+[15:15:47] Fault injected at 2026-11-23T15:15:45.402Z (instance clock): httpd stopped with 'systemctl stop httpd'
+
+=== 4. Detect ===
+[15:15:47] Monitor detected the outage at 2026-11-23T15:15:45.698Z (HTTP 000) - time to detect 0.3 s
+
+=== 5. Investigate and restore (manual) ===
+[15:15:47] Responder collecting evidence from the instance via SSM
+$ systemctl status httpd
+○ httpd.service - The Apache HTTP Server
+     Loaded: loaded (/usr/lib/systemd/system/httpd.service; enabled; preset: disabled)
+    Drop-In: /etc/systemd/system/httpd.service.d
+             └─10-restart.conf
+     Active: inactive (dead) since Mon 2026-11-23 15:15:46 UTC; 2s ago
+   Duration: 4min 11.068s
+       Docs: man:httpd.service(8)
+    Process: 4777 ExecStart=/usr/sbin/httpd $OPTIONS -DFOREGROUND (code=exited, status=0/SUCCESS)
+
+$ journalctl -u httpd (last 10 min)
+Nov 23 15:11:34 ip-10-24-1-238.ap-south-1.compute.internal systemd[1]: Starting httpd.service - The Apache HTTP Server...
+Nov 23 15:11:34 ip-10-24-1-238.ap-south-1.compute.internal systemd[1]: Started httpd.service - The Apache HTTP Server.
+Nov 23 15:11:34 ip-10-24-1-238.ap-south-1.compute.internal httpd[4777]: Server configured, listening on: port 80
+Nov 23 15:15:45 ip-10-24-1-238.ap-south-1.compute.internal systemd[1]: Stopping httpd.service - The Apache HTTP Server...
+Nov 23 15:15:46 ip-10-24-1-238.ap-south-1.compute.internal systemd[1]: httpd.service: Deactivated successfully.
+Nov 23 15:15:46 ip-10-24-1-238.ap-south-1.compute.internal systemd[1]: Stopped httpd.service - The Apache HTTP Server.
+
+$ ss -ltn sport = :80
+nothing is listening on port 80
+[15:15:51] Holding the outage for another 25s (outage target 30s)
+[15:16:16] Restarting httpd
+### STATE CHANGE 2026-11-23T15:16:18.255Z DOWN -> UP (http 200)
+ACTION_MS=1795446977477
+is-active : active
+local health: HTTP 200
+[15:16:20] Manual restart issued at 2026-11-23T15:16:17.477Z
+
+=== 6. Verify recovery ===
+[15:16:20] First successful health check at 2026-11-23T15:16:18.255Z - outage observed for 32.6 s
+[15:16:20] Stability window: 15s of continuous health checks
+[15:16:35] After recovery: 17 UP / 0 DOWN checks
+is-active : active
+MainPID=26791
+NRestarts=0
+ActiveEnterTimestamp=Mon 2026-11-23 15:16:17 UTC
+local health: HTTP 200
+
+Nov 23 15:15:45 ip-10-24-1-238.ap-south-1.compute.internal systemd[1]: Stopping httpd.service - The Apache HTTP Server...
+Nov 23 15:15:46 ip-10-24-1-238.ap-south-1.compute.internal systemd[1]: httpd.service: Deactivated successfully.
+Nov 23 15:15:46 ip-10-24-1-238.ap-south-1.compute.internal systemd[1]: Stopped httpd.service - The Apache HTTP Server.
+Nov 23 15:16:17 ip-10-24-1-238.ap-south-1.compute.internal systemd[1]: Starting httpd.service - The Apache HTTP Server...
+Nov 23 15:16:17 ip-10-24-1-238.ap-south-1.compute.internal systemd[1]: Started httpd.service - The Apache HTTP Server.
+Nov 23 15:16:17 ip-10-24-1-238.ap-south-1.compute.internal httpd[26791]: Server configured, listening on: port 80
+[15:16:38] App page served from this VM: yes
+
+=== 7. Results ===
+Scenario                           stop (httpd stopped with 'systemctl stop httpd')
+Fault injected                     2026-11-23T15:15:45.402Z
+Outage detected                    2026-11-23T15:15:45.698Z
+Restart issued                     2026-11-23T15:16:17.477Z
+Service recovered                  2026-11-23T15:16:18.255Z
+Time to detect (MTTD)              0.3 s
+Time to recover (MTTR, from fault) 32.9 s
+Observed downtime (monitor)        32.6 s
+Restart -> healthy                 0.8 s
+Health checks                      63 total, 31 UP, 32 DOWN (32 x HTTP 000)
+Availability during test           49.2%
+RESULT                             PASS
+
+[15:16:38] Incident notes written to /home/clouduser/aws-terraform-capstone/project24-manual-chaos-test/results/stop/incident-notes.md
+[15:16:38] Console log saved to   /home/clouduser/aws-terraform-capstone/project24-manual-chaos-test/results/stop/chaos-test-output.txt
