@@ -333,7 +333,7 @@ cat >"$NOTES" <<EOF
 | Result | **${RESULT}** - $([ "$RESULT" = PASS ] && echo "service recovered and stayed healthy" || echo "recovery not verified, see chaos-test-output.txt") |
 
 ## Summary
-${FAULT_DESC^} at $(iso "$INJECT_MS"). The health monitor detected the outage after $(secs "$INJECT_MS" "$DETECT_MS") and the service was serving traffic again at $(iso "$RECOVER_MS"), $(secs "$INJECT_MS" "$RECOVER_MS") after the fault. During the ${STABILITY_SECS}s verification window that followed, ${POST_DOWN} health checks failed.
+Fault injected at $(iso "$INJECT_MS"): ${FAULT_DESC}. The health monitor detected the outage after $(secs "$INJECT_MS" "$DETECT_MS") and the service was serving traffic again at $(iso "$RECOVER_MS"), $(secs "$INJECT_MS" "$RECOVER_MS") after the fault. During the ${STABILITY_SECS}s verification window that followed, ${POST_DOWN} health checks failed.
 
 ## Impact
 - ${DOWN} of ${TOTAL} health checks failed (${DOWN_CODES}); availability during the test window: ${AVAIL}.

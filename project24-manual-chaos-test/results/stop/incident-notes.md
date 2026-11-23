@@ -10,7 +10,7 @@
 | Result | **PASS** - service recovered and stayed healthy |
 
 ## Summary
-Httpd stopped with 'systemctl stop httpd' at 2026-11-23T15:15:45.402Z. The health monitor detected the outage after 0.3 s and the service was serving traffic again at 2026-11-23T15:16:18.255Z, 32.9 s after the fault. During the 15s verification window that followed, 0 health checks failed.
+Fault injected at 2026-11-23T15:15:45.402Z: httpd stopped with 'systemctl stop httpd'. The health monitor detected the outage after 0.3 s and the service was serving traffic again at 2026-11-23T15:16:18.255Z, 32.9 s after the fault. During the 15s verification window that followed, 0 health checks failed.
 
 ## Impact
 - 32 of 63 health checks failed (32 x HTTP 000); availability during the test window: 49.2%.
