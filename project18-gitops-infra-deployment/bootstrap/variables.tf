@@ -16,6 +16,12 @@ variable "github_repository" {
   default     = "ShivamPatel2604/Capstone_Projects"
 }
 
+variable "github_repository_immutable" {
+  description = "Immutable OIDC subject form of the repository (owner@owner_id/repo@repo_id). Check with: gh api repos/OWNER/REPO/actions/oidc/customization/sub. Empty string to disable."
+  type        = string
+  default     = "ShivamPatel2604@358403276/Capstone_Projects@1464022307"
+}
+
 variable "github_environment" {
   description = "GitHub environment (with required reviewers) that gates terraform apply"
   type        = string
@@ -29,7 +35,7 @@ variable "state_key" {
 }
 
 variable "create_oidc_provider" {
-  description = "Set to false if the GitHub OIDC provider already exists in this AWS account"
+  description = "Create the GitHub OIDC provider. false = reuse the one that already exists in this AWS account"
   type        = bool
-  default     = true
+  default     = false
 }

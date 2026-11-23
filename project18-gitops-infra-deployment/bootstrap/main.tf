@@ -4,6 +4,9 @@ locals {
   account_id      = data.aws_caller_identity.current.account_id
   github_oidc_url = "token.actions.githubusercontent.com"
 
+  # GitHub sends either the legacy (owner/repo) or immutable (owner@id/repo@id) subject
+  github_sub_repos = compact([var.github_repository, var.github_repository_immutable])
+
   oidc_provider_arn = var.create_oidc_provider ? aws_iam_openid_connect_provider.github[0].arn : "arn:aws:iam::${local.account_id}:oidc-provider/${local.github_oidc_url}"
 
   state_object_arn = "${aws_s3_bucket.tf_state.arn}/${var.state_key}"
@@ -103,10 +106,12 @@ data "aws_iam_policy_document" "plan_trust" {
     condition {
       test     = "StringEquals"
       variable = "${local.github_oidc_url}:sub"
-      values = [
-        "repo:${var.github_repository}:pull_request",
-        "repo:${var.github_repository}:ref:refs/heads/main",
-      ]
+      values = flatten([
+        for r in local.github_sub_repos : [
+          "repo:${r}:pull_request",
+          "repo:${r}:ref:refs/heads/main",
+        ]
+      ])
     }
   }
 }
@@ -183,7 +188,7 @@ data "aws_iam_policy_document" "apply_trust" {
     condition {
       test     = "StringEquals"
       variable = "${local.github_oidc_url}:sub"
-      values   = ["repo:${var.github_repository}:environment:${var.github_environment}"]
+      values   = [for r in local.github_sub_repos : "repo:${r}:environment:${var.github_environment}"]
     }
   }
 }

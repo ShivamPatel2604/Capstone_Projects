@@ -9,7 +9,7 @@ by GitHub Actions only after the PR is merged **and** a reviewer approves the `p
 | Task | How it is implemented |
 | --- | --- |
 | Configure apply job | `apply` job in `.github/workflows/project18-gitops-infra.yml` runs on push to `main` (PR merge), downloads the exact reviewed `tfplan` and runs `terraform apply tfplan` |
-| Add approvals | GitHub **environment `production`** with *required reviewers* + branch policy `main`. The AWS apply role trusts **only** the OIDC subject `repo:ShivamPatel2604/Capstone_Projects:environment:production`, so nothing can apply without an approved deployment |
+| Add approvals | GitHub **environment `production`** with *required reviewers* + branch policy `main`. The AWS apply role trusts **only** the OIDC subject `repo:<repo>:environment:production`, so nothing can apply without an approved deployment |
 
 ## Setup
 - Workstation: the Ubuntu 24.04 Linux VM used for previous projects (Terraform + AWS CLI + `gh`)
@@ -88,8 +88,12 @@ terraform plan -out=tfplan
 terraform apply tfplan
 terraform output
 ```
-> If the account already has the GitHub OIDC provider (`token.actions.githubusercontent.com`),
-> use `terraform plan -var="create_oidc_provider=false" -out=tfplan` instead.
+> The account already has the GitHub OIDC provider (`token.actions.githubusercontent.com`), so it is reused
+> (`create_oidc_provider = false`). In a fresh account use `terraform plan -var="create_oidc_provider=true" -out=tfplan`.
+>
+> This repository uses GitHub's **immutable OIDC subject** (`repo:ShivamPatel2604@358403276/Capstone_Projects@1464022307:...`).
+> Both trust policies accept the immutable and the legacy `repo:owner/name:...` form. Check yours with
+> `gh api repos/OWNER/REPO/actions/oidc/customization/sub` and set `github_repository_immutable` accordingly.
 
 ### 3. Store the bootstrap outputs as GitHub repository variables
 ```bash
