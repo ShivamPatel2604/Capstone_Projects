@@ -1,0 +1,134 @@
+================================================================
+ Project 23 - IAM role based S3 access test
+ Date     : 2026-11-23 14:36:24 UTC
+ Instance : i-0bf1223f48b8fa637 (ap-south-1)
+ Buckets  : app=shivam-project23-app-data-590507089733  restricted=shivam-project23-restricted-590507089733
+ Allowed  : s3://shivam-project23-app-data-590507089733/app-data/*
+================================================================
+
+=== 1. Where do the credentials come from? ===
+Instance profile : arn:aws:iam::590507089733:instance-profile/shivam-project23-ec2-s3-profile
+Role (IMDSv2)    : shivam-project23-ec2-s3-role
+  "Code" : "Success",
+  "LastUpdated" : "2026-11-23T14:35:33Z",
+  "Type" : "AWS-HMAC",
+  "Expiration" : "2026-11-23T21:10:32Z"
+Static key file  : none (~/.aws/credentials does not exist)
+Key env vars     : none
+
+NAME       : VALUE                    : TYPE             : LOCATION
+profile    : <not set>                : None             : None
+access_key : ****************QANC     : iam-role         : 
+secret_key : ****************8mHh     : iam-role         : 
+region     : ap-south-1               : env              : ['AWS_REGION', 'AWS_DEFAULT_REGION']
+
+=== 2. Allowed actions ===
+
+--- Identify caller (assumed role, no keys) (expected: ALLOW)
+$ aws sts get-caller-identity --output table
+--------------------------------------------------------------------------------------------------------
+|                                           GetCallerIdentity                                          |
++---------+--------------------------------------------------------------------------------------------+
+|  Account|  590507089733                                                                              |
+|  Arn    |  arn:aws:sts::590507089733:assumed-role/shivam-project23-ec2-s3-role/i-0bf1223f48b8fa637   |
+|  UserId |  AROAYS7HXD5C3NZ7IHO5E:i-0bf1223f48b8fa637                                                 |
++---------+--------------------------------------------------------------------------------------------+
+=> ALLOW ... PASS
+
+--- List objects in app bucket (expected: ALLOW)
+$ aws s3 ls s3://shivam-project23-app-data-590507089733/ --recursive
+2026-11-23 14:35:19         69 admin/config.txt
+2026-11-23 14:35:19         82 app-data/welcome.txt
+=> ALLOW ... PASS
+
+--- Read object in app-data/ (expected: ALLOW)
+$ aws s3 cp s3://shivam-project23-app-data-590507089733/app-data/welcome.txt -
+Hello from shivam-project23-app-data-590507089733 - readable by the EC2 IAM role.
+=> ALLOW ... PASS
+
+--- Upload object to app-data/ (expected: ALLOW)
+$ aws s3 cp /tmp/tmp.b25J5hXXgk s3://shivam-project23-app-data-590507089733/app-data/ec2-upload-i-0bf1223f48b8fa637-20261123T143625Z.txt
+Completed 108 Bytes/108 Bytes (2.4 KiB/s) with 1 file(s) remainingupload: ../../tmp/tmp.b25J5hXXgk to s3://shivam-project23-app-data-590507089733/app-data/ec2-upload-i-0bf1223f48b8fa637-20261123T143625Z.txt
+=> ALLOW ... PASS
+
+--- Download uploaded object and verify content (expected: ALLOW)
+$ bash -c aws s3 cp 's3://shivam-project23-app-data-590507089733/app-data/ec2-upload-i-0bf1223f48b8fa637-20261123T143625Z.txt' /tmp/s3-download.txt && cmp '/tmp/tmp.b25J5hXXgk' /tmp/s3-download.txt && cat /tmp/s3-download.txt
+Completed 108 Bytes/108 Bytes (3.9 KiB/s) with 1 file(s) remainingdownload: s3://shivam-project23-app-data-590507089733/app-data/ec2-upload-i-0bf1223f48b8fa637-20261123T143625Z.txt to ../../tmp/s3-download.txt
+Uploaded by i-0bf1223f48b8fa637 using IAM role shivam-project23-ec2-s3-role at Mon Nov 23 14:36:25 UTC 2026
+=> ALLOW ... PASS
+
+--- Uploaded object is encrypted at rest (expected: ALLOW)
+$ aws s3api head-object --bucket shivam-project23-app-data-590507089733 --key app-data/ec2-upload-i-0bf1223f48b8fa637-20261123T143625Z.txt --query {Key:'app-data/ec2-upload-i-0bf1223f48b8fa637-20261123T143625Z.txt',Size:ContentLength,Encryption:ServerSideEncryption} --output table
+--------------------------------------------------------------------------------
+|                                  HeadObject                                  |
++------------+-----------------------------------------------------------------+
+|  Encryption|  AES256                                                         |
+|  Key       |  app-data/ec2-upload-i-0bf1223f48b8fa637-20261123T143625Z.txt   |
+|  Size      |  108                                                            |
++------------+-----------------------------------------------------------------+
+=> ALLOW ... PASS
+
+=== 3. Denied actions (least privilege) ===
+
+--- Upload outside app-data/ (expected: DENY)
+$ aws s3 cp /tmp/tmp.b25J5hXXgk s3://shivam-project23-app-data-590507089733/admin/hacked.txt
+upload failed: ../../tmp/tmp.b25J5hXXgk to s3://shivam-project23-app-data-590507089733/admin/hacked.txt An error occurred (AccessDenied) when calling the PutObject operation: User: arn:aws:sts::590507089733:assumed-role/shivam-project23-ec2-s3-role/i-0bf1223f48b8fa637 is not authorized to perform: s3:PutObject on resource: "arn:aws:s3:::shivam-project23-app-data-590507089733/admin/hacked.txt" because no identity-based policy allows the s3:PutObject action
+=> DENY ... PASS
+
+--- Read object outside app-data/ (expected: DENY)
+$ aws s3 cp s3://shivam-project23-app-data-590507089733/admin/config.txt -
+download failed: s3://shivam-project23-app-data-590507089733/admin/config.txt to - An error occurred (403) when calling the HeadObject operation: Forbidden
+=> DENY ... PASS
+
+--- Delete object (no s3:DeleteObject) (expected: DENY)
+$ aws s3 rm s3://shivam-project23-app-data-590507089733/app-data/ec2-upload-i-0bf1223f48b8fa637-20261123T143625Z.txt
+delete failed: s3://shivam-project23-app-data-590507089733/app-data/ec2-upload-i-0bf1223f48b8fa637-20261123T143625Z.txt An error occurred (AccessDenied) when calling the DeleteObject operation: User: arn:aws:sts::590507089733:assumed-role/shivam-project23-ec2-s3-role/i-0bf1223f48b8fa637 is not authorized to perform: s3:DeleteObject on resource: "arn:aws:s3:::shivam-project23-app-data-590507089733/app-data/ec2-upload-i-0bf1223f48b8fa637-20261123T143625Z.txt" because no identity-based policy allows the s3:DeleteObject action
+=> DENY ... PASS
+
+--- List restricted bucket (expected: DENY)
+$ aws s3 ls s3://shivam-project23-restricted-590507089733/
+
+aws: [ERROR]: An error occurred (AccessDenied) when calling the ListObjectsV2 operation: User: arn:aws:sts::590507089733:assumed-role/shivam-project23-ec2-s3-role/i-0bf1223f48b8fa637 is not authorized to perform: s3:ListBucket on resource: "arn:aws:s3:::shivam-project23-restricted-590507089733" because no identity-based policy allows the s3:ListBucket action
+=> DENY ... PASS
+
+--- Read object in restricted bucket (expected: DENY)
+$ aws s3 cp s3://shivam-project23-restricted-590507089733/secret.txt -
+download failed: s3://shivam-project23-restricted-590507089733/secret.txt to - An error occurred (403) when calling the HeadObject operation: Forbidden
+=> DENY ... PASS
+
+--- List all buckets in the account (expected: DENY)
+$ aws s3 ls
+
+aws: [ERROR]: An error occurred (AccessDenied) when calling the ListBuckets operation: User: arn:aws:sts::590507089733:assumed-role/shivam-project23-ec2-s3-role/i-0bf1223f48b8fa637 is not authorized to perform: s3:ListAllMyBuckets because no identity-based policy allows the s3:ListAllMyBuckets action
+=> DENY ... PASS
+
+--- Use another service (EC2 DescribeInstances) (expected: DENY)
+$ aws ec2 describe-instances --max-items 1
+
+aws: [ERROR]: An error occurred (UnauthorizedOperation) when calling the DescribeInstances operation: You are not authorized to perform this operation. User: arn:aws:sts::590507089733:assumed-role/shivam-project23-ec2-s3-role/i-0bf1223f48b8fa637 is not authorized to perform: ec2:DescribeInstances because no identity-based policy allows the ec2:DescribeInstances action
+=> DENY ... PASS
+
+--- Use IAM (ListUsers) (expected: DENY)
+$ aws iam list-users --max-items 1
+
+aws: [ERROR]: An error occurred (AccessDenied) when calling the ListUsers operation: User: arn:aws:sts::590507089733:assumed-role/shivam-project23-ec2-s3-role/i-0bf1223f48b8fa637 is not authorized to perform: iam:ListUsers on resource: arn:aws:iam::590507089733:user/ because no identity-based policy allows the iam:ListUsers action. Go to https://us-east-1.console.aws.amazon.com/iam/home?region=us-east-1#/authorization-details/bb9mav9ge0ium2yuz9mrho79n for complete details, or call the GetRequestAuthorizationDetails API with the following authorization id: bb9mav9ge0ium2yuz9mrho79n
+=> DENY ... PASS
+
+================================================================
+ SUMMARY  (14 passed, 0 failed)
+================================================================
+PASS  ALLOW  Identify caller (assumed role, no keys)
+PASS  ALLOW  List objects in app bucket
+PASS  ALLOW  Read object in app-data/
+PASS  ALLOW  Upload object to app-data/
+PASS  ALLOW  Download uploaded object and verify content
+PASS  ALLOW  Uploaded object is encrypted at rest
+PASS  DENY   Upload outside app-data/
+PASS  DENY   Read object outside app-data/
+PASS  DENY   Delete object (no s3:DeleteObject)
+PASS  DENY   List restricted bucket
+PASS  DENY   Read object in restricted bucket
+PASS  DENY   List all buckets in the account
+PASS  DENY   Use another service (EC2 DescribeInstances)
+PASS  DENY   Use IAM (ListUsers)
+
