@@ -61,6 +61,7 @@ Install Ansible, the AWS Python SDK, and the Session Manager plugin:
 ```bash
 sudo apt update
 sudo apt install -y ansible python3-boto3 python3-botocore
+ansible-galaxy collection install 'amazon.aws:>=8.0.0,<10.0.0'
 
 curl -fsSL "https://s3.amazonaws.com/session-manager-downloads/plugin/latest/ubuntu_64bit/session-manager-plugin.deb" -o /tmp/session-manager-plugin.deb
 sudo dpkg -i /tmp/session-manager-plugin.deb
@@ -140,6 +141,8 @@ Save the screenshots in this folder:
 - `5.png` – browser showing the web page from node 2
 
 ## Troubleshooting
+- `connection plugin 'amazon.aws.aws_ssm' was not found`: install the collection from step 2.
+- URLs not opening: expected until the playbook has installed Apache.
 - `ping` hangs / instance not in SSM: wait a few minutes; check `describe-instance-information` shows `Online`.
 - `session-manager-plugin not found`: re-run the install in step 2.
 - `Failed to import boto3`: `sudo apt install -y python3-boto3 python3-botocore`.
