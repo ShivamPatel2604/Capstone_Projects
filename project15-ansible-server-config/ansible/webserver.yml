@@ -1,0 +1,55 @@
+---
+- name: Install and configure Apache web server
+  hosts: webservers
+  become: true
+
+  vars:
+    web_package: httpd
+    web_service: httpd
+    web_root: /var/www/html
+
+  tasks:
+    - name: Install Apache
+      ansible.builtin.dnf:
+        name: "{{ web_package }}"
+        state: present
+
+    - name: Deploy custom index page
+      ansible.builtin.template:
+        src: templates/index.html.j2
+        dest: "{{ web_root }}/index.html"
+        owner: apache
+        group: apache
+        mode: "0644"
+
+    - name: Hide Apache version in responses
+      ansible.builtin.copy:
+        dest: /etc/httpd/conf.d/security.conf
+        content: |
+          ServerTokens Prod
+          ServerSignature Off
+        mode: "0644"
+      notify: Restart Apache
+
+    - name: Start and enable Apache
+      ansible.builtin.service:
+        name: "{{ web_service }}"
+        state: started
+        enabled: true
+
+  handlers:
+    - name: Restart Apache
+      ansible.builtin.service:
+        name: "{{ web_service }}"
+        state: restarted
+
+- name: Verify web servers
+  hosts: webservers
+  gather_facts: false
+
+  tasks:
+    - name: Check HTTP 200 from each node
+      ansible.builtin.uri:
+        url: "http://{{ ansible_host }}"
+        status_code: 200
+      delegate_to: localhost

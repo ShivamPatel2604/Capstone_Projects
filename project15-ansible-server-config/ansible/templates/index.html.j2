@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Project 15 - Configured by Ansible</title>
+  <style>
+    body { font-family: Arial, sans-serif; background: #1a1a2e; color: #eee; text-align: center; padding-top: 60px; }
+    .card { display: inline-block; background: #16213e; padding: 30px 50px; border-radius: 10px; text-align: left; }
+    h1 { color: #e94560; }
+    td { padding: 4px 12px; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h1>Project 15: Server Config with Ansible</h1>
+    <p>This web server was installed and configured remotely by an Ansible playbook.</p>
+    <table>
+      <tr><td>Inventory host</td><td>{{ inventory_hostname }}</td></tr>
+      <tr><td>Hostname</td><td>{{ ansible_facts['hostname'] }}</td></tr>
+      <tr><td>Private IP</td><td>{{ ansible_facts['default_ipv4']['address'] }}</td></tr>
+      <tr><td>OS</td><td>{{ ansible_facts['distribution'] }} {{ ansible_facts['distribution_version'] }}</td></tr>
+      <tr><td>Configured at</td><td>{{ ansible_facts['date_time']['iso8601'] }}</td></tr>
+    </table>
+  </div>
+</body>
+</html>
